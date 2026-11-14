@@ -4,6 +4,7 @@ export interface AuthHeaders {
   "x-address": string;
   "x-ts": string;
   "x-sig": string;
+  [key: string]: string;
 }
 
 export interface AuthVerificationResult {
