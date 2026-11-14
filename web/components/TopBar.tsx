@@ -85,22 +85,36 @@ export function TopBar({
     }
   };
 
-  const handleCopyBundle = () => {
+  const handleDownloadRecoveryFile = () => {
     const bundle = exportIdentityBundle();
     navigator.clipboard.writeText(bundle);
     setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
+    setTimeout(() => setCopySuccess(false), 2500);
+
+    try {
+      const blob = new Blob([bundle], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `veilhealth-recovery-${currentRole}-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback already copied to clipboard
+    }
   };
 
   const handleImportBundle = () => {
     if (!importJson.trim()) return;
     const res = importIdentityBundle(importJson.trim());
     if (res.success) {
-      alert(`Imported identities: ${res.importedRoles.join(", ")}`);
+      alert(`Restored emergency identity keys for: ${res.importedRoles.join(", ")}`);
       getOrCreateIdentity(currentRole).then((id) => setIdentity(id));
       setShowIdentityModal(false);
     } else {
-      alert(`Import failed: ${res.error}`);
+      alert(`Recovery failed: ${res.error}`);
     }
   };
 
@@ -137,27 +151,33 @@ export function TopBar({
               </div>
             </Link>
 
-            {/* Navigation links (Desktop) */}
-            <nav className="hidden lg:flex items-center gap-1">
-              {navLinks.map((item) => {
-                const isActive = safePath === item.href || (item.href !== "/" && safePath.startsWith(item.href));
-                const IconComponent = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
-                      isActive
-                        ? "bg-surface text-primary border border-primary/30 shadow-sm"
-                        : "text-veil-muted hover:text-veil-text hover:bg-card/50"
-                    }`}
-                  >
-                    <IconComponent className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-veil-muted"}`} />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+            {/* Navigation links & Demo Persona Switcher (Desktop) */}
+            <div className="hidden lg:flex items-center gap-2">
+              <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-primary-subtle border border-primary/30 text-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                Demo Mode: Switch Persona
+              </span>
+              <nav className="flex items-center gap-1">
+                {navLinks.map((item) => {
+                  const isActive = safePath === item.href || (item.href !== "/" && safePath.startsWith(item.href));
+                  const IconComponent = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
+                        isActive
+                          ? "bg-surface text-primary border border-primary/30 shadow-sm"
+                          : "text-veil-muted hover:text-veil-text hover:bg-card/50"
+                      }`}
+                    >
+                      <IconComponent className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-veil-muted"}`} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
           {/* Right Action Bar */}
@@ -214,16 +234,17 @@ export function TopBar({
               </button>
             )}
 
-            {/* Identity & Wallet Button */}
+            {/* Backup & Recovery Button */}
             <button
               type="button"
               onClick={() => setShowIdentityModal(true)}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border hover:border-borderLight text-veil-text text-xs font-mono transition-all duration-150 cursor-pointer"
+              title="Backup & Recovery: Emergency keys and recovery file"
             >
-              <div className="w-2 h-2 rounded-full bg-veil-success" />
-              <span className="capitalize font-semibold text-primary">{currentRole}</span>
-              <span className="text-veil-muted hidden sm:inline">
-                ({identity ? shortenAddress(identity.address) : "..."})
+              <KeyIcon className="w-3.5 h-3.5 text-primary" />
+              <span className="font-semibold text-veil-text hidden sm:inline">Backup &amp; Recovery</span>
+              <span className="text-veil-muted text-[11px] capitalize">
+                ({currentRole})
               </span>
             </button>
 
@@ -244,6 +265,10 @@ export function TopBar({
         {/* Mobile Dropdown Navigation */}
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-border bg-background/95 px-4 py-3 space-y-1">
+            <div className="px-3 py-1.5 mb-2 rounded-lg bg-primary-subtle border border-primary/30 text-primary text-xs font-mono flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Demo Mode: Switch Persona
+            </div>
             {navLinks.map((item) => {
               const isActive = safePath === item.href || (item.href !== "/" && safePath.startsWith(item.href));
               const IconComponent = item.icon;
@@ -267,18 +292,23 @@ export function TopBar({
         )}
       </header>
 
-      {/* Identity / Wallet Modal */}
+      {/* Backup & Recovery Modal */}
       {showIdentityModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-lg bg-surface border border-border rounded-2xl p-6 shadow-2xl space-y-6">
+          <div className="w-full max-w-lg bg-surface border border-border rounded-2xl p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-primary-subtle border border-primary/30 flex items-center justify-center text-primary">
                   <KeyIcon className="w-4 h-4" />
                 </div>
-                <h3 className="font-heading font-semibold text-base text-veil-text">
-                  Role Identity &amp; Key Vault
-                </h3>
+                <div>
+                  <h3 className="font-heading font-semibold text-base text-veil-text">
+                    Backup &amp; Recovery
+                  </h3>
+                  <p className="text-[11px] text-veil-muted">
+                    Protect your self-sovereign medical identity
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -289,13 +319,24 @@ export function TopBar({
               </button>
             </div>
 
+            {/* Plain English explanation note */}
+            <div className="p-3.5 rounded-xl bg-card border border-primary/30 text-xs text-veil-text leading-relaxed space-y-1">
+              <div className="flex items-center gap-1.5 text-primary font-semibold text-xs font-mono">
+                <ShieldIcon className="w-3.5 h-3.5" />
+                <span>Zero Server Key Storage</span>
+              </div>
+              <p className="text-veil-muted text-[11px]">
+                Save this file in a safe place like your email drafts or cloud drive. Because we never store your keys on our servers, you need this file to unlock your medical records on a new browser or device.
+              </p>
+            </div>
+
             {/* Active Identity Details */}
             {identity && (
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-card border border-border space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs uppercase font-mono text-veil-muted tracking-wider">
-                      Active Role Wallet
+                      Current Persona Wallet
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-primary-subtle text-primary border border-primary/30 capitalize">
                       {identity.role}
@@ -303,7 +344,7 @@ export function TopBar({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[11px] text-veil-muted font-mono">Ethereum / Base Address</label>
+                    <label className="text-[11px] text-veil-muted font-mono">Account Address</label>
                     <div className="flex items-center justify-between p-2 rounded-lg bg-background border border-border text-xs font-mono text-veil-text select-all">
                       <span className="truncate pr-2">{identity.address}</span>
                       <button
@@ -316,21 +357,14 @@ export function TopBar({
                       </button>
                     </div>
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-veil-muted font-mono">ECDH P-256 Public Key (JWK)</label>
-                    <div className="p-2 rounded-lg bg-background border border-border text-[11px] font-mono text-veil-muted truncate select-all">
-                      {JSON.stringify(identity.publicKeyJwk)}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Test Faucet */}
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-card/60 border border-border">
                   <div className="space-y-0.5">
-                    <div className="text-xs font-medium text-veil-text">Testnet Gas Faucet</div>
+                    <div className="text-xs font-medium text-veil-text">Free Testnet Gas Faucet</div>
                     <div className="text-[11px] text-veil-muted">
-                      Request 0.05 Base Sepolia ETH to sign transactions
+                      Request 0.05 Base Sepolia ETH to sign test records
                     </div>
                   </div>
                   <button
@@ -350,35 +384,38 @@ export function TopBar({
                   </div>
                 )}
 
-                {/* Export & Import Identity Bundle */}
+                {/* Download Emergency Recovery File & Restore */}
                 <div className="space-y-3 pt-2 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-veil-text">Backup &amp; Sync Identities</span>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-xs font-medium text-veil-text">Emergency Recovery File</span>
                     <button
                       type="button"
-                      onClick={handleCopyBundle}
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-secondary font-medium transition-colors cursor-pointer"
+                      onClick={handleDownloadRecoveryFile}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-black text-xs font-bold transition-all shadow-glowGold cursor-pointer"
                     >
                       {copySuccess ? <CheckIcon className="w-3.5 h-3.5" /> : <CopyIcon className="w-3.5 h-3.5" />}
-                      <span>{copySuccess ? "Copied!" : "Export All Keys (JSON)"}</span>
+                      <span>{copySuccess ? "Copied & Downloaded!" : "Download Emergency Recovery File"}</span>
                     </button>
                   </div>
 
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Paste exported JSON bundle to restore..."
-                      value={importJson}
-                      onChange={(e) => setImportJson(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-xs text-veil-text placeholder:text-veil-muted/50 focus:border-primary focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleImportBundle}
-                      className="px-3 py-2 rounded-lg bg-card border border-border hover:border-borderLight text-xs font-medium text-veil-text transition-colors cursor-pointer"
-                    >
-                      Restore
-                    </button>
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[11px] text-veil-muted">Restore on a New Device</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Paste emergency recovery file contents to restore..."
+                        value={importJson}
+                        onChange={(e) => setImportJson(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-xs text-veil-text placeholder:text-veil-muted/50 focus:border-primary focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleImportBundle}
+                        className="px-3 py-2 rounded-lg bg-card border border-border hover:border-borderLight text-xs font-medium text-veil-text transition-colors cursor-pointer"
+                      >
+                        Restore
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

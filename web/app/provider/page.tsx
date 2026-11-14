@@ -146,7 +146,7 @@ export default function ProviderDashboard() {
     if (!providerIdentity || !patientAddrInput) return;
 
     setIsSubmitting(true);
-    setStatusText("1/5 Generating AES-GCM 256 record key in WebCrypto...");
+    setStatusText("1/4 Securing clinical note on device...");
 
     try {
       const amountCents = Math.round(parseFloat(amountDollars) * 100);
@@ -167,14 +167,14 @@ export default function ProviderDashboard() {
       // 2. Encrypt record with random AES-GCM 256 key
       const recordKey = await generateRecordKey();
       const encryptedBlob = await encryptRecord(plaintext, recordKey);
-      setStatusText("2/5 Wrapping record key for Patient & Provider (ECDH P-256 + HKDF)...");
+      setStatusText("2/4 Locking private key for patient...");
 
       // 3. Ephemeral ECDH key wrapping
       const patientKeyJwk = patientIdentity?.publicKeyJwk || providerIdentity.publicKeyJwk;
       const patientWrap = await wrapRecordKey(recordKey, patientKeyJwk);
       const providerWrap = await wrapRecordKey(recordKey, providerIdentity.publicKeyJwk);
 
-      setStatusText("3/5 Signing EIP-191 Provider Attestation on-chain...");
+      setStatusText("3/4 Signing Verified Medical Receipt...");
       // 4. Sign EIP-191 Provider Attestation
       const providerWallet = getWalletForIdentity(providerIdentity);
       const digest = ethers.keccak256(
@@ -192,7 +192,7 @@ export default function ProviderDashboard() {
       );
       const attestationSig = await providerWallet.signMessage(ethers.getBytes(digest));
 
-      setStatusText("4/5 Storing ciphertext and key wraps in Postgres...");
+      setStatusText("4/4 Saving private note & creating bill...");
       const recordItem: VisitRecordItem = {
         recordId,
         patientAddress: patientAddrInput,
@@ -234,7 +234,7 @@ export default function ProviderDashboard() {
         localStorage.setItem("veil_health_patient_attestations", JSON.stringify(attObj));
       }
 
-      setStatusText("5/5 Complete! Record created & attested successfully.");
+      setStatusText("Complete! Private visit note saved & verified receipt created.");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setStatusText(`Visit creation error: ${message}`);
@@ -262,7 +262,7 @@ export default function ProviderDashboard() {
             Provider Clinical Portal
           </h1>
           <p className="text-xs sm:text-sm text-veil-muted max-w-2xl leading-relaxed">
-            Create client-side encrypted visits, attest covered procedures without exposing diagnosis to insurers, and request shielded Zcash payments.
+            Save private visit notes directly to the patient's device, sign verified medical receipts for private insurance claims, and create private consultation bills.
           </p>
         </div>
 
@@ -276,7 +276,7 @@ export default function ProviderDashboard() {
             </div>
             <div className="flex items-center gap-1.5 text-veil-success text-[11px] pt-1">
               <span className="w-1.5 h-1.5 rounded-full bg-veil-success" />
-              <span>Attestation Signer Active</span>
+              <span>Verified Receipt Signer Active</span>
             </div>
           </div>
         )}
@@ -323,7 +323,7 @@ export default function ProviderDashboard() {
           }`}
         >
           <ZapIcon className="w-4 h-4" />
-          <span>Zcash Invoices &amp; Reconciliation</span>
+          <span>Private Consultation Bills ({recordsList.length})</span>
         </button>
       </div>
 
@@ -334,7 +334,7 @@ export default function ProviderDashboard() {
             <div className="p-6 rounded-2xl bg-card border border-border space-y-6">
               <h2 className="font-heading font-bold text-base text-veil-text flex items-center gap-2">
                 <LockIcon className="w-5 h-5 text-primary" />
-                <span>Create Client-Side Encrypted Visit</span>
+                <span>Create Private Visit Note</span>
               </h2>
 
               <form onSubmit={handleCreateVisit} className="space-y-4">
@@ -427,7 +427,7 @@ export default function ProviderDashboard() {
                   className="w-full py-3 px-4 rounded-xl bg-primary hover:bg-primary-hover text-black font-bold text-xs transition-all shadow-glowGold flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   <LockIcon className="w-4 h-4" />
-                  <span>{isSubmitting ? "Encrypting & Attesting..." : "Encrypt, Attest & Issue Visit"}</span>
+                  <span>{isSubmitting ? "Saving Private Note..." : "Save Private Visit Note"}</span>
                 </button>
               </form>
             </div>
@@ -439,24 +439,24 @@ export default function ProviderDashboard() {
               <div className="p-6 rounded-2xl bg-card border-2 border-primary/60 space-y-4 shadow-glowGold">
                 <div className="flex items-center gap-2 text-xs font-semibold text-primary">
                   <CheckCircleIcon className="w-5 h-5 text-veil-success" />
-                  <span>Visit Issued &amp; Attested!</span>
+                  <span>Private Visit Note Saved!</span>
                 </div>
 
                 <div className="space-y-2 text-xs font-mono">
                   <div>
-                    <span className="text-veil-muted text-[10px] block uppercase">Record ID</span>
-                    <span className="text-veil-text font-bold">#{submitSuccessRecord.recordId}</span>
+                    <span className="text-veil-muted text-[10px] block uppercase">Record Reference</span>
+                    <span className="text-veil-text font-bold">Visit #{submitSuccessRecord.recordId}</span>
                   </div>
                   <div>
-                    <span className="text-veil-muted text-[10px] block uppercase">Content Hash</span>
+                    <span className="text-veil-muted text-[10px] block uppercase">Private File Fingerprint</span>
                     <span className="text-veil-text break-all text-[11px]">
                       {submitSuccessRecord.contentHash.slice(0, 20)}...
                     </span>
                   </div>
                   <div>
-                    <span className="text-veil-muted text-[10px] block uppercase">EIP-191 Attestation</span>
+                    <span className="text-veil-muted text-[10px] block uppercase">Signed Verified Medical Receipt</span>
                     <span className="text-veil-success break-all text-[11px]">
-                      {submitSuccessRecord.attestationSig?.slice(0, 22)}... (Verified)
+                      {submitSuccessRecord.attestationSig?.slice(0, 22)}... (Attestation Valid ✓)
                     </span>
                   </div>
                 </div>
@@ -464,20 +464,20 @@ export default function ProviderDashboard() {
                 {/* Zcash Payment Request Card */}
                 <div className="p-4 rounded-xl bg-surface border border-border space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-veil-text">Zcash Payment Request</span>
+                    <span className="font-semibold text-veil-text">Create Private Consultation Bill</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary-subtle text-primary border border-primary/30">
-                      ZIP-321
+                      Private ZEC
                     </span>
                   </div>
                   <div className="space-y-1 text-xs font-mono">
-                    <div className="text-veil-muted text-[10px]">Payment Memo:</div>
+                    <div className="text-veil-muted text-[10px]">Payment Reference Code:</div>
                     <div className="flex items-center justify-between p-2 bg-card border border-border rounded-lg">
                       <span className="text-primary font-bold">{submitSuccessRecord.paymentMemo}</span>
                       <button
                         type="button"
                         onClick={() => copyPaymentMemo(submitSuccessRecord.paymentMemo)}
                         className="text-veil-muted hover:text-veil-text p-1 cursor-pointer"
-                        title="Copy payment memo"
+                        title="Copy payment code"
                       >
                         <CopyIcon className="w-3.5 h-3.5" />
                       </button>
@@ -485,27 +485,27 @@ export default function ProviderDashboard() {
                     {copiedMemo && <span className="text-[10px] text-veil-success">Copied to clipboard!</span>}
                   </div>
                   <div className="text-[11px] text-veil-muted">
-                    Patient settles ${amountDollars} privately in shielded ZEC with this memo.
+                    Patient settles ${amountDollars} privately using this reference code.
                   </div>
                 </div>
               </div>
             ) : (
               <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
                 <h3 className="font-heading font-semibold text-sm text-veil-text">
-                  How Clinical Visits Work
+                  How Private Visits Work
                 </h3>
                 <ul className="text-xs text-veil-muted space-y-2.5">
                   <li className="flex items-start gap-2.5">
                     <span className="text-primary font-mono font-bold">1.</span>
-                    <span>Client-side AES-GCM 256 record key is generated locally in browser memory.</span>
+                    <span><strong>Save Private Visit Note:</strong> Encrypted on your device so no cloud server or insurer can ever read your diagnosis.</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <span className="text-primary font-mono font-bold">2.</span>
-                    <span>Provider wraps key for patient via ECDH P-256 + HKDF.</span>
+                    <span><strong>Sign Verified Medical Receipt:</strong> Confirms procedure and cost for insurance reimbursement without revealing medical details.</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <span className="text-primary font-mono font-bold">3.</span>
-                    <span>Signs EIP-191 attestation: enables claims without disclosing diagnosis.</span>
+                    <span><strong>Create Private Consultation Bill:</strong> Generates a confidential bill code for private settlement.</span>
                   </li>
                 </ul>
               </div>
@@ -551,7 +551,7 @@ export default function ProviderDashboard() {
                 <div className="pt-2 flex items-center justify-between border-t border-border">
                   <span className="text-xs font-mono text-veil-success flex items-center gap-1.5">
                     <CheckCircleIcon className="w-3.5 h-3.5" />
-                    <span>Attestation Verified On-Chain</span>
+                    <span>Verified Medical Receipt Active</span>
                   </span>
                   <button
                     type="button"
@@ -573,15 +573,15 @@ export default function ProviderDashboard() {
         </div>
       )}
 
-      {/* TAB 3: Zcash Invoices & Reconciliation */}
+      {/* TAB 3: Private Consultation Bills */}
       {activeTab === "payments" && (
         <div className="space-y-6">
           <div className="p-6 rounded-2xl bg-card border border-border space-y-2">
             <h3 className="font-heading font-semibold text-base text-veil-text">
-              Shielded Invoices &amp; Reconciliation
+              Private Consultation Bills &amp; Receipts
             </h3>
             <p className="text-xs text-veil-muted leading-relaxed">
-              Every visit generates a unique payment memo formatted as <code className="text-primary font-mono">VH-VISIT-&lt;recordId&gt;</code>. When shielded payments arrive, the memo reconciles the visit without revealing patient-clinic financial links.
+              Every visit generates a confidential payment code formatted as <code className="text-primary font-mono">VH-VISIT-&lt;recordId&gt;</code>. Patients can pay privately without banks or insurers tracking the transaction.
             </p>
           </div>
 
@@ -593,11 +593,11 @@ export default function ProviderDashboard() {
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-heading font-bold text-veil-text">Record #{rec.recordId}</span>
+                    <span className="font-heading font-bold text-veil-text">Visit #{rec.recordId}</span>
                     <span className="text-primary font-semibold">${(rec.amountCents / 100).toFixed(2)} USD</span>
                   </div>
                   <div className="text-veil-muted">
-                    Expected Memo: <code className="text-veil-text">{rec.paymentMemo}</code>
+                    Private Bill Code: <code className="text-veil-text">{rec.paymentMemo}</code>
                   </div>
                 </div>
 
@@ -609,7 +609,7 @@ export default function ProviderDashboard() {
                         : "bg-surface border border-border text-veil-muted"
                     }`}
                   >
-                    {rec.paid ? "PAID (ZEC Reconciled)" : "UNPAID (Awaiting Shielded Tx)"}
+                    {rec.paid ? "PAID PRIVATELY ✓" : "UNPAID (Awaiting Private Payment)"}
                   </span>
                 </div>
               </div>

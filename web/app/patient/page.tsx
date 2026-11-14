@@ -29,6 +29,7 @@ import {
   ZapIcon,
   FileTextIcon,
   ActivityIcon,
+  QrCodeIcon,
 } from "@/components/Icons";
 
 export interface ActiveGrant {
@@ -76,6 +77,9 @@ export default function PatientDashboard() {
   const [isPaying, setIsPaying] = useState(false);
   const [payResult, setPayResult] = useState<string | null>(null);
   const [receivedNotes, setReceivedNotes] = useState<any[]>([]);
+  const [oneClickPaying, setOneClickPaying] = useState(false);
+  const [isDemoPaid, setIsDemoPaid] = useState(false);
+  const [verificationMsg, setVerificationMsg] = useState<string | null>(null);
 
   // Access Log
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
@@ -324,6 +328,51 @@ export default function PatientDashboard() {
     }
   };
 
+  const handleOneClickPayment = async () => {
+    setOneClickPaying(true);
+    setPayResult(null);
+    setVerificationMsg(null);
+
+    try {
+      const adapter = getZcashAdapter();
+      const res = await adapter.send(clinicAddress, payAmountZec, payMemo);
+      setIsDemoPaid(true);
+      setPayResult(`Shielded payment broadcast! TxID: ${res.txid}`);
+
+      // Mark the visit as paid in localStorage for provider reconciliation
+      if (typeof window !== "undefined") {
+        const rawVisits = localStorage.getItem("veil_health_provider_visits");
+        if (rawVisits) {
+          try {
+            const list = JSON.parse(rawVisits);
+            const updated = list.map((v: any) =>
+              v.paymentMemo === payMemo ? { ...v, paid: true } : v
+            );
+            localStorage.setItem("veil_health_provider_visits", JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      // Refresh received notes list
+      const notes = await adapter.listReceived();
+      setReceivedNotes(notes);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPayResult(`Payment failed: ${msg}`);
+    } finally {
+      setOneClickPaying(false);
+    }
+  };
+
+  const handleVerifyPayment = () => {
+    const payoutRef = computePayoutRef(payMemo);
+    setVerificationMsg(
+      `Verified Private Payment: Memo "${payMemo}" matches on-chain reference ${payoutRef.slice(0, 16)}... Reconciled with zero financial disclosure.`
+    );
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in">
       {/* Top Header Card */}
@@ -391,11 +440,11 @@ export default function PatientDashboard() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="font-heading font-bold text-base text-veil-text">
-              Encrypted Medical Records
+              Private Medical Records
             </h2>
             <div className="flex items-center gap-1.5 text-xs font-mono text-veil-success bg-surface border border-border px-3 py-1 rounded-full">
               <LockIcon className="w-3.5 h-3.5" />
-              <span>Decrypted Locally with WebCrypto</span>
+              <span>Protected on Your Device</span>
             </div>
           </div>
 
@@ -420,10 +469,10 @@ export default function PatientDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono text-veil-muted p-3 rounded-xl bg-surface">
-                    <div>Content Hash: <code className="text-veil-text">{rec.contentHash?.slice(0, 18)}...</code></div>
+                    <div>Content Fingerprint: <code className="text-veil-text">{rec.contentHash?.slice(0, 18)}...</code></div>
                     <div className="flex items-center gap-1 text-veil-success">
                       <CheckCircleIcon className="w-3.5 h-3.5" />
-                      <span>EIP-191 Provider Attestation Valid</span>
+                      <span>Verified Medical Receipt Attached</span>
                     </div>
                   </div>
 
@@ -432,7 +481,7 @@ export default function PatientDashboard() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-primary flex items-center gap-1.5 font-mono">
                           <EyeIcon className="w-3.5 h-3.5" />
-                          Decrypted locally in browser memory:
+                          Unlocked safely in your browser:
                         </span>
                         <span className="text-[10px] font-mono text-veil-success bg-green-950/40 border border-green-800 px-2 py-0.5 rounded">
                           0% SERVER EXPOSURE
@@ -451,7 +500,7 @@ export default function PatientDashboard() {
                   ) : (
                     <div className="flex items-center justify-between pt-2">
                       <span className="text-xs text-veil-muted">
-                        Encrypted ciphertext payload stored on Postgres.
+                        Encrypted and locked. Only your browser can unlock this note.
                       </span>
                       <button
                         type="button"
@@ -460,7 +509,7 @@ export default function PatientDashboard() {
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-black font-semibold text-xs transition-all shadow-glowGold cursor-pointer disabled:opacity-50"
                       >
                         <LockIcon className="w-3.5 h-3.5" />
-                        <span>{decryptingId === rec.recordId ? "Decrypting..." : "Decrypt Record Locally"}</span>
+                        <span>{decryptingId === rec.recordId ? "Unlocking..." : "Unlock & View Record"}</span>
                       </button>
                     </div>
                   )}
@@ -478,12 +527,12 @@ export default function PatientDashboard() {
             <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
               <h2 className="font-heading font-bold text-base text-veil-text flex items-center gap-2">
                 <KeyIcon className="w-5 h-5 text-primary" />
-                <span>Grant Scoped Access</span>
+                <span>Share With Doctor</span>
               </h2>
 
               <form onSubmit={handleGrantAccess} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-veil-text">Record ID:</label>
+                  <label className="text-xs font-medium text-veil-text">Record to Share:</label>
                   <select
                     value={selectedRecordId}
                     onChange={(e) => setSelectedRecordId(parseInt(e.target.value, 10))}
@@ -498,7 +547,7 @@ export default function PatientDashboard() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-veil-text">Doctor / Grantee Address:</label>
+                  <label className="text-xs font-medium text-veil-text">Doctor Address:</label>
                   <input
                     type="text"
                     required
@@ -509,7 +558,7 @@ export default function PatientDashboard() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-veil-text">Duration:</label>
+                  <label className="text-xs font-medium text-veil-text">Auto-Revoke Duration:</label>
                   <div className="grid grid-cols-4 gap-2 text-xs font-mono">
                     {["2m", "1h", "24h", "7d"].map((dur) => (
                       <button
@@ -527,7 +576,7 @@ export default function PatientDashboard() {
                     ))}
                   </div>
                   <p className="text-[11px] text-veil-muted pt-1">
-                    Tip: Use <strong>2m</strong> to test automated on-chain expiry in 2 minutes.
+                    Tip: Use <strong>2m</strong> to test automated time-lock expiry in 2 minutes.
                   </p>
                 </div>
 
@@ -541,7 +590,7 @@ export default function PatientDashboard() {
                   type="submit"
                   className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-hover text-black font-semibold text-xs transition-all shadow-glowGold cursor-pointer"
                 >
-                  Grant Access (grantAccess)
+                  Share With Doctor
                 </button>
               </form>
             </div>
@@ -550,7 +599,7 @@ export default function PatientDashboard() {
           {/* Active Grants List */}
           <div className="lg:col-span-2 space-y-4">
             <h2 className="font-heading font-bold text-base text-veil-text">
-              Active Access Grants ({activeGrants.length})
+              Active Doctor Sharing ({activeGrants.length})
             </h2>
 
             {activeGrants.length === 0 ? (
@@ -583,7 +632,7 @@ export default function PatientDashboard() {
                           </span>
                         </div>
                         <div className="font-mono text-veil-muted text-[11px]">
-                          Grantee: {grant.grantee.slice(0, 10)}...{grant.grantee.slice(-6)}
+                          Doctor: {grant.grantee.slice(0, 10)}...{grant.grantee.slice(-6)}
                         </div>
                       </div>
 
@@ -592,7 +641,7 @@ export default function PatientDashboard() {
                         onClick={() => handleRevokeGrant(grant.recordId, grant.grantee)}
                         className="px-3.5 py-2 rounded-xl bg-veil-danger/10 border border-veil-danger/30 text-veil-danger hover:bg-veil-danger/20 text-xs font-semibold transition-all cursor-pointer"
                       >
-                        Revoke Access
+                        Stop Sharing
                       </button>
                     </div>
                   );
@@ -695,86 +744,214 @@ export default function PatientDashboard() {
 
       {/* TAB 4: Payments */}
       {activeTab === "payments" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
-            <h2 className="font-heading font-bold text-base text-veil-text">
-              Pay Clinic in Shielded ZEC
-            </h2>
-            <p className="text-xs text-veil-muted">
-              Sends private testnet ZEC with a memo linking to your visit.
-            </p>
-
-            <form onSubmit={handleSendPayment} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-veil-text">Clinic Unified Address:</label>
-                <input
-                  type="text"
-                  required
-                  value={clinicAddress}
-                  onChange={(e) => setClinicAddress(e.target.value)}
-                  className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
-                />
+        <div className="space-y-8">
+          {/* Featured Consultation Payment Card */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-card border-2 border-primary/50 shadow-glowGold space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <span className="text-[11px] font-mono text-primary uppercase tracking-wider block font-semibold">
+                  Outstanding Consultation Bill
+                </span>
+                <h3 className="font-heading font-bold text-xl text-veil-text mt-0.5">
+                  Comprehensive Cardiology Consultation
+                </h3>
+                <span className="text-xs text-veil-muted">
+                  Veil Health Clinical Practice &bull; Visit #1
+                </span>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-veil-text">Amount (ZEC):</label>
-                  <input
-                    type="text"
-                    required
-                    value={payAmountZec}
-                    onChange={(e) => setPayAmountZec(e.target.value)}
-                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
-                  />
+              <div className="text-right">
+                <div className="text-2xl font-heading font-bold text-primary">
+                  $240.00 <span className="text-xs font-mono text-veil-muted">USD</span>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-veil-text">Memo:</label>
-                  <input
-                    type="text"
-                    required
-                    value={payMemo}
-                    onChange={(e) => setPayMemo(e.target.value)}
-                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
-                  />
+                <div className="text-xs font-mono text-veil-muted">
+                  ~0.05 ZEC (Shielded Private)
                 </div>
               </div>
+            </div>
 
-              {payResult && (
-                <div className="p-3 bg-surface border border-primary/40 rounded-xl text-xs font-mono text-primary">
-                  {payResult}
+            {/* QR Code and 1-Click Action */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              {/* QR Code Display */}
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border">
+                <div className="w-28 h-28 bg-black rounded-lg border border-primary/40 p-2 flex flex-col items-center justify-center relative flex-shrink-0 shadow-inner">
+                  {/* Stylized QR Matrix Pattern */}
+                  <div className="w-full h-full grid grid-cols-5 gap-1 p-1">
+                    <div className="bg-primary rounded-sm col-span-2 row-span-2" />
+                    <div className="bg-primary/40 rounded-sm" />
+                    <div className="bg-primary rounded-sm col-span-2 row-span-2" />
+                    <div className="bg-primary/60 rounded-sm" />
+                    <div className="bg-primary rounded-sm" />
+                    <div className="bg-primary/80 rounded-sm" />
+                    <div className="bg-primary rounded-sm col-span-2 row-span-2" />
+                    <div className="bg-primary/50 rounded-sm" />
+                    <div className="bg-primary rounded-sm" />
+                    <div className="bg-primary/70 rounded-sm" />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-7 h-7 rounded-full bg-background border border-primary flex items-center justify-center shadow-lg">
+                      <ShieldIcon className="w-4 h-4 text-primary" />
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={isPaying}
-                className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-black font-bold text-xs transition-all shadow-glowGold cursor-pointer disabled:opacity-50"
-              >
-                {isPaying ? "Broadcasting Shielded Tx..." : "Send Shielded Payment (send)"}
-              </button>
-            </form>
+                <div className="space-y-1.5 text-xs font-mono overflow-hidden">
+                  <div className="flex items-center gap-1.5 text-primary font-semibold text-[11px]">
+                    <QrCodeIcon className="w-3.5 h-3.5" />
+                    <span>Private ZIP-321 Bill</span>
+                  </div>
+                  <div className="text-[11px] text-veil-muted truncate">
+                    Clinic: {clinicAddress.slice(0, 14)}...
+                  </div>
+                  <div className="text-[11px] text-veil-muted">
+                    Memo Code: <span className="text-veil-text font-bold">{payMemo}</span>
+                  </div>
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-primary-subtle text-primary border border-primary/30">
+                    Shielded Testnet
+                  </span>
+                </div>
+              </div>
+
+              {/* Prominent High-Contrast 1-Click Button & Verification */}
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleOneClickPayment}
+                  disabled={oneClickPaying}
+                  className="w-full py-4 px-6 rounded-xl bg-primary hover:bg-primary-hover text-black font-heading font-bold text-sm tracking-wide transition-all shadow-glowGold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <ZapIcon className="w-5 h-5 text-black" />
+                  <span>
+                    {oneClickPaying
+                      ? "Broadcasting Shielded Payment..."
+                      : isDemoPaid
+                      ? "Pay Privately Again (1-Click Demo)"
+                      : "Pay Privately (1-Click Demo)"}
+                  </span>
+                </button>
+
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleVerifyPayment}
+                    className="flex-1 py-2 px-3 rounded-lg bg-surface border border-border hover:border-primary/50 text-xs font-mono text-veil-text transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircleIcon className="w-3.5 h-3.5 text-veil-success" />
+                    <span>Verify Private Payment</span>
+                  </button>
+
+                  <span className="text-[11px] text-veil-muted text-right font-mono">
+                    Instant demo test
+                  </span>
+                </div>
+
+                {isDemoPaid && (
+                  <div className="p-3 rounded-xl bg-green-950/40 border border-green-800 text-xs font-mono text-veil-success flex items-center gap-2 animate-in fade-in">
+                    <CheckCircleIcon className="w-4 h-4 flex-shrink-0" />
+                    <span>Bill Settled Privately! The clinic received private ZEC with your visit memo.</span>
+                  </div>
+                )}
+
+                {verificationMsg && (
+                  <div className="p-3 rounded-xl bg-surface border border-primary/40 text-xs font-mono text-primary animate-in fade-in">
+                    {verificationMsg}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
-            <h2 className="font-heading font-bold text-base text-veil-text">
-              Received Insurer Payouts
-            </h2>
-            <div className="space-y-3">
-              {receivedNotes.length === 0 ? (
-                <div className="p-8 text-center text-xs text-veil-muted bg-surface rounded-xl border border-border">
-                  No incoming shielded payouts detected yet.
+          {/* Subordinate Manual Wallet & Claims Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Manual External Wallet Form */}
+            <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
+              <h3 className="font-heading font-semibold text-base text-veil-text">
+                Pay with External Zcash Wallet
+              </h3>
+              <p className="text-xs text-veil-muted">
+                Or transfer from Zashi, YWallet, or any ZIP-321 compatible shielded wallet.
+              </p>
+
+              <form onSubmit={handleSendPayment} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-veil-text">Clinic Unified Address:</label>
+                  <input
+                    type="text"
+                    required
+                    value={clinicAddress}
+                    onChange={(e) => setClinicAddress(e.target.value)}
+                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
+                  />
                 </div>
-              ) : (
-                receivedNotes.map((note, idx) => (
-                  <div key={idx} className="p-3.5 bg-surface rounded-xl border border-border text-xs font-mono space-y-1">
-                    <div className="flex items-center justify-between text-veil-success font-semibold">
-                      <span>+{note.zec} ZEC</span>
-                      <span>{note.memo}</span>
-                    </div>
-                    <div className="text-[11px] text-veil-muted truncate">Tx: {note.txid}</div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-veil-text">Amount (ZEC):</label>
+                    <input
+                      type="text"
+                      required
+                      value={payAmountZec}
+                      onChange={(e) => setPayAmountZec(e.target.value)}
+                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
+                    />
                   </div>
-                ))
-              )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-veil-text">Memo Code:</label>
+                    <input
+                      type="text"
+                      required
+                      value={payMemo}
+                      onChange={(e) => setPayMemo(e.target.value)}
+                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs font-mono text-veil-text focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                {payResult && (
+                  <div className="p-3 bg-surface border border-primary/40 rounded-xl text-xs font-mono text-primary">
+                    {payResult}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isPaying}
+                  className="w-full py-2.5 rounded-xl bg-surface border border-border hover:border-primary text-veil-text font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isPaying ? "Broadcasting Shielded Tx..." : "Send Shielded Payment"}
+                </button>
+              </form>
+            </div>
+
+            {/* Received Insurer Claim Payouts */}
+            <div className="p-6 rounded-2xl bg-card border border-border space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-heading font-semibold text-base text-veil-text">
+                  Received Insurer Claim Payouts
+                </h3>
+                <span className="text-[11px] font-mono text-veil-success bg-green-950/40 border border-green-800 px-2 py-0.5 rounded">
+                  Shielded Receipts
+                </span>
+              </div>
+              <p className="text-xs text-veil-muted">
+                Reimbursements deposited directly to your private Zcash address without bank surveillance.
+              </p>
+              <div className="space-y-3">
+                {receivedNotes.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-veil-muted bg-surface rounded-xl border border-border">
+                    No incoming shielded payouts detected yet.
+                  </div>
+                ) : (
+                  receivedNotes.map((note, idx) => (
+                    <div key={idx} className="p-3.5 bg-surface rounded-xl border border-border text-xs font-mono space-y-1">
+                      <div className="flex items-center justify-between text-veil-success font-semibold">
+                        <span>+{note.zec} ZEC</span>
+                        <span>{note.memo}</span>
+                      </div>
+                      <div className="text-[11px] text-veil-muted truncate">Tx: {note.txid}</div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>

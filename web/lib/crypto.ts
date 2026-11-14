@@ -106,7 +106,7 @@ export async function computeContentHash(
     typeof ciphertextInput === "string"
       ? new TextEncoder().encode(ciphertextInput)
       : ciphertextInput;
-  const digest = await subtle.digest("SHA-256", bytes);
+  const digest = await subtle.digest("SHA-256", bytes as BufferSource);
   return bytesToHex(new Uint8Array(digest));
 }
 
@@ -132,7 +132,7 @@ export async function importRawRecordKey(rawBytes: Uint8Array): Promise<CryptoKe
   const subtle = getSubtleCrypto();
   return subtle.importKey(
     "raw",
-    rawBytes,
+    rawBytes as BufferSource,
     { name: "AES-GCM", length: 256 },
     true,
     ["encrypt", "decrypt"]
@@ -150,9 +150,9 @@ export async function encryptRecord(
 
   const iv = getRandomValues(new Uint8Array(12)); // 12-byte IV for AES-GCM
   const ciphertextBuffer = await subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     key,
-    data
+    data as BufferSource
   );
 
   const ciphertextBase64 = bytesToBase64(new Uint8Array(ciphertextBuffer));
@@ -176,9 +176,9 @@ export async function decryptRecord(
   const ivBytes = base64ToBytes(ivBase64);
 
   const decryptedBuffer = await subtle.decrypt(
-    { name: "AES-GCM", iv: ivBytes },
+    { name: "AES-GCM", iv: ivBytes as BufferSource },
     key,
-    ciphertextBytes
+    ciphertextBytes as BufferSource
   );
 
   const text = new TextDecoder().decode(decryptedBuffer);
@@ -282,9 +282,9 @@ export async function wrapRecordKey(
   // Encrypt raw record key with 12-byte IV
   const iv = getRandomValues(new Uint8Array(12));
   const wrappedBuffer = await subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as BufferSource },
     wrappingKey,
-    rawKeyBytes
+    rawKeyBytes as BufferSource
   );
 
   // Export ephemeral public key as JWK
@@ -364,9 +364,9 @@ export async function unwrapRecordKey(
   const wrappedBytes = base64ToBytes(wrappedData.wrappedKey);
 
   const rawKeyBuffer = await subtle.decrypt(
-    { name: "AES-GCM", iv: ivBytes },
+    { name: "AES-GCM", iv: ivBytes as BufferSource },
     wrappingKey,
-    wrappedBytes
+    wrappedBytes as BufferSource
   );
 
   // Import raw key as AES-GCM record key
